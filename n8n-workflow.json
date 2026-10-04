@@ -1,95 +1,167 @@
 {
-  "name": "Daily YouTube Kids Video Generator (Native Nodes)",
+  "name": "Daily YouTube Kids Video Generator",
   "nodes": [
     {
       "parameters": {
         "triggerTimes": {
           "item": [
             {
-              "hour": 6,
-              "minute": 0
+              "hour": 6
             }
           ]
         }
       },
-      "id": "cron-trigger",
+      "id": "2dcfbac5-4e09-40a0-8231-bf4cb1ea988f",
       "name": "Daily at 6 AM",
       "type": "n8n-nodes-base.cron",
       "typeVersion": 1,
-      "position": [250, 300]
+      "position": [
+        0,
+        0
+      ]
     },
     {
       "parameters": {
-        "model": "gemini-1.5-flash",
-        "prompt": "Create a 3-minute nursery rhyme video for YouTube Kids (ages 2-5).\n\nOutput ONLY valid JSON with this exact structure:\n{\n  \"title\": \"string - catchy, kid-friendly, < 60 chars\",\n  \"description\": \"string - 2-3 sentences, includes keywords\",\n  \"tags\": [\"string\", \"...\"],\n  \"playlist\": \"string - playlist name or ID\",\n  \"scenes\": [\n    {\n      \"id\": 1,\n      \"duration\": 12,\n      \"prompt\": \"string - detailed SDXL prompt for this scene: character + setting + mood + style. Consistent character description. 2D nursery rhyme illustration style, bright colors, simple shapes.\",\n      \"lyrics\": \"string - 1-2 lines of lyrics shown on screen during this scene\",\n      \"narration\": \"string - voiceover text for this scene (spoken, not sung)\"\n    }\n    // ... 12-15 scenes total, durations sum to ~180 seconds\n  ],\n  \"backgroundMusic\": \"string - mood/tempo for CC0 music search (e.g. 'cheerful acoustic ukulele 80bpm')\"\n}\n\nRequirements:\n- Main character: A friendly animated bunny named \"Benny\" - round, soft, big ears, blue shirt, always smiling\n- Educational theme: colors, numbers, animals, or daily routines\n- Simple repetitive lyrics kids can sing along\n- Gentle, soothing tone\n- Each scene 10-15 seconds\n- Total ~180 seconds (3 minutes)\n- Scene prompts must include: \"Benny the bunny, round soft blue shirt, big ears, 2D vector illustration, nursery rhyme style, bright pastel colors, simple shapes, clean lines\"\n- Lyrics timed to match scene duration\n- Narration separate from lyrics (spoken storyteller voice)",
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-3.8-flash",
+          "mode": "list",
+          "cachedResultName": "models/gemini-3.8-flash"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "Create a 3-minute nursery rhyme video for YouTube Kids (ages 2-5).\n\nOutput ONLY valid JSON with this exact structure:\n{\n  \"title\": \"string - catchy, kid-friendly, < 60 chars\",\n  \"description\": \"string - 2-3 sentences, includes keywords\",\n  \"tags\": [\"string\", \"...\"],\n  \"playlist\": \"string - playlist name or ID\",\n  \"scenes\": [\n    {\n      \"id\": 1,\n      \"duration\": 12,\n      \"prompt\": \"string - detailed SDXL prompt for this scene: character + setting + mood + style. Consistent character description. 2D nursery rhyme illustration style, bright colors, simple shapes.\",\n      \"lyrics\": \"string - 1-2 lines of lyrics shown on screen during this scene\",\n      \"narration\": \"string - voiceover text for this scene (spoken, not sung)\"\n    }\n    // ... 12-15 scenes total, durations sum to ~180 seconds\n  ],\n  \"backgroundMusic\": \"string - mood/tempo for CC0 music search (e.g. 'cheerful acoustic ukulele 80bpm')\"\n}\n\nRequirements:\n- Main character: A friendly animated bunny named \"Benny\" - round, soft, big ears, blue shirt, always smiling\n- Educational theme: colors, numbers, animals, or daily routines\n- Simple repetitive lyrics kids can sing along\n- Gentle, soothing tone\n- Each scene 10-15 seconds\n- Total ~180 seconds (3 minutes)\n- Scene prompts must include: \"Benny the bunny, round soft blue shirt, big ears, 2D vector illustration, nursery rhyme style, bright pastel colors, simple shapes, clean lines\"\n- Lyrics timed to match scene duration\n- Narration separate from lyrics (spoken storyteller voice)"
+            }
+          ]
+        },
+        "builtInTools": {},
         "options": {
-          "temperature": 0.8,
-          "maxOutputTokens": 4096
+          "maxOutputTokens": 4096,
+          "temperature": 0.8
         }
       },
-      "id": "generate-script",
-      "name": "Generate Script (Gemini)",
-      "type": "n8n-nodes-base.googleGemini",
-      "typeVersion": 1,
-      "position": [500, 300],
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        224,
+        0
+      ],
+      "id": "3704f7b6-7773-44d4-8ecd-0c519e460474",
+      "name": "Generate Script",
       "credentials": {
-        "googleGeminiApi": "gemini-api"
+        "googlePalmApi": {
+          "id": "1heplB3pAfXeNPaZ",
+          "name": "Google Gemini(PaLM) Api account"
+        }
       }
     },
     {
       "parameters": {
-        "functionCode": "// Parse Gemini response and extract JSON\nconst response = $input.item.json;\nlet text = response.text || response.content || JSON.stringify(response);\ntext = text.replace(/```json|```/g, '').trim();\nconst parsed = JSON.parse(text);\n\nreturn [{ json: parsed }];"
+        "jsCode": "// Parse n8n Google Gemini node response - returns JSON directly\nconst response = $input.item.json;\n\n// The native node returns the JSON directly in the output\n// Check if it's already the parsed object we want\nif (response.title && response.scenes && Array.isArray(response.scenes)) {\n  return [{ json: response }];\n}\n\n// Fallback: extract from text fields\nlet text = '';\nif (typeof response === 'string') {\n  text = response;\n} else if (response.text) {\n  text = typeof response.text === 'string' ? response.text : JSON.stringify(response.text);\n} else if (response.content) {\n  text = typeof response.content === 'string' ? response.content : JSON.stringify(response.content);\n} else {\n  text = JSON.stringify(response);\n}\n\n// Clean and parse\ntext = String(text).replace(/```json|```/g, '').trim();\n\ntry {\n  const parsed = JSON.parse(text);\n  return [{ json: parsed }];\n} catch (e) {\n  return [{ json: { \n    error: 'Failed to parse', \n    rawText: text,\n    keys: Object.keys(response)\n  } }];\n}"
       },
-      "id": "parse-script",
-      "name": "Parse Script JSON",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 1,
-      "position": [750, 300]
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        592,
+        0
+      ],
+      "id": "a0299c19-a155-4b7b-8d78-537f4dc61169",
+      "name": "Parse Script JSON"
     },
     {
       "parameters": {
-        "options": {},
-        "url": "https://image.pollinations.ai/prompt/{{ encodeURIComponent($json.CHARACTER_PROMPT + ', ' + $json.item.prompt) }}?width=1920&height=1080&seed={{ 12345 + $json.item.id }}&model=flux&nologo=true",
-        "method": "GET",
-        "responseFormat": "file",
-        "jsonParameters": false
+        "options": {}
       },
-      "id": "generate-images",
-      "name": "Generate Scene Images (Pollinations)",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        816,
+        0
+      ],
+      "id": "f5bf0e82-0ed0-4dcd-b7ec-ef3ce9f64176",
+      "name": "Split scenes"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build Pollinations URL with all parameters evaluated\nconst CHARACTER_PROMPT = 'Benny the bunny, round soft blue shirt, big ears, 2D vector illustration, nursery rhyme style, bright pastel colors, simple shapes, clean lines';\n\n// Split In Batches outputs each scene directly in $json\nconst fullPrompt = CHARACTER_PROMPT + ', ' + $json.prompt;\nconst encoded = encodeURIComponent(fullPrompt);\nconst seed = 12345 + $json.id;\n\nconst url = `https://image.pollinations.ai/prompt/${encoded}?width=1920&height=1080&seed=${seed}&model=flux&nologo=true`;\n\nreturn [{\n  json: {\n    ...$json,\n    pollinationsUrl: url\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1056,
+        16
+      ],
+      "id": "577892e4-1aa6-468a-8739-9e90d1129aaa",
+      "name": "Build Pollinations URL"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.pollinationsUrl }}\n",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": []
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
       "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.1,
-      "position": [1000, 300]
+      "typeVersion": 4.5,
+      "position": [
+        1264,
+        0
+      ],
+      "id": "4b24ec66-a789-4af3-ae75-e7656dc0b33d",
+      "name": "Generate Scene Images",
+      "retryOnFail": true
     },
     {
       "parameters": {
-        "url": "https://edge.microsoft.com/translate/tts",
-        "method": "POST",
-        "options": {},
-        "jsonParameters": false,
-        "headerParametersJson": "Content-Type: application/x-www-form-urlencoded",
-        "bodyParametersJson": "text={{ $json.ssml }}&voice=en-US-JennyNeural",
-        "responseFormat": "file"
+        "jsCode": "// Combine all scenes back into single script with images\nconst items = $input.all();\nconst first = items[0].json;\nconst script = { ...first };\nscript.sceneImages = items.map(item => item.json.pollinationsResult);\nreturn [{ json: script }];"
       },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1480,
+        -120
+      ],
+      "id": "combine-scenes",
+      "name": "Combine Scenes"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate voiceover using Edge TTS (Microsoft, free, no key)\n// Returns audio buffer + timing for lyric sync\n\nconst script = $input.item.json;\nconst scenes = script.scenes;\n\nlet fullText = '';\nconst timing = [];\nlet currentTime = 0;\n\nfor (const scene of scenes) {\n  if (scene.narration) {\n    timing.push({ type: 'narration', sceneId: scene.id, start: currentTime, text: scene.narration });\n    fullText += scene.narration + ' ';\n    currentTime += scene.narration.length * 0.08;\n  }\n  if (scene.lyrics) {\n    timing.push({ type: 'lyrics', sceneId: scene.id, start: currentTime, text: scene.lyrics, duration: scene.duration });\n    fullText += scene.lyrics + ' ';\n    currentTime += scene.duration;\n  }\n}\n\nconst voice = 'en-US-JennyNeural';\nconst ssml = `<speak version='1.0' xml:lang='en-US'><voice name='${voice}'>${fullText}</voice></speak>`;\n\nconst response = await fetch('https://edge.microsoft.com/translate/tts', {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/x-www-form-urlencoded' },\n  body: new URLSearchParams({ text: ssml, voice })\n});\n\nconst audioBuffer = await response.arrayBuffer();\nconst audioBase64 = Buffer.from(audioBuffer).toString('base64');\n\nreturn [{ json: { ...script, audioBase64, timing } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1720,
+        -120
+      ],
       "id": "generate-voiceover",
-      "name": "Generate Voiceover (Edge TTS)",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.1,
-      "position": [1250, 300]
+      "name": "Generate Voiceover (Edge TTS)"
     },
     {
       "parameters": {
         "url": "https://api.github.com/repos/Estou-maker/n8n/actions/workflows/render-video.yml/dispatches",
         "method": "POST",
-        "options": {},
         "jsonParameters": true,
-        "headerParametersJson": "Authorization: Bearer YOUR_GH_TOKEN\nAccept: application/vnd.github.v3+json",
+        "options": {},
+        "headerParametersJson": "{\n  \"Authorization\": \"Bearer YOUR_GITHUB_TOKEN\",\n  \"Accept\": \"application/vnd.github.v3+json\"\n}",
         "bodyParametersJson": "{\n  \"ref\": \"main\",\n  \"inputs\": {\n    \"script\": \"{{ JSON.stringify($json) }}\"\n  }\n}"
       },
       "id": "trigger-render",
       "name": "Trigger GitHub Actions Render",
       "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.1,
-      "position": [1500, 300]
+      "typeVersion": 4.5,
+      "position": [
+        1960,
+        -120
+      ],
+      "credentials": {
+        "httpHeaderAuth": "github-token"
+      }
     },
     {
       "parameters": {
@@ -103,7 +175,10 @@
       "name": "Upload to Google Drive",
       "type": "n8n-nodes-base.googleDrive",
       "typeVersion": 3,
-      "position": [1750, 300],
+      "position": [
+        2200,
+        -120
+      ],
       "credentials": {
         "googleDriveOAuth2Api": "google-drive-oauth"
       }
@@ -114,14 +189,14 @@
       "main": [
         [
           {
-            "node": "Generate Script (Gemini)",
+            "node": "Generate Script",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Generate Script (Gemini)": {
+    "Generate Script": {
       "main": [
         [
           {
@@ -136,14 +211,54 @@
       "main": [
         [
           {
-            "node": "Generate Scene Images (Pollinations)",
+            "node": "Split scenes",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Generate Scene Images (Pollinations)": {
+    "Split scenes": {
+      "main": [
+        [
+          {
+            "node": "Build Pollinations URL",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Combine Scenes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Pollinations URL": {
+      "main": [
+        [
+          {
+            "node": "Generate Scene Images",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Scene Images": {
+      "main": [
+        [
+          {
+            "node": "Split scenes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combine Scenes": {
       "main": [
         [
           {
@@ -177,13 +292,18 @@
       ]
     }
   },
+  "pinData": {},
   "active": false,
   "settings": {
-    "executionOrder": "v1"
+    "executionOrder": "v1",
+    "binaryMode": "separate"
   },
-  "versionId": "1",
+  "versionId": "05f05b18-c588-401c-8e27-3112846bf9fd",
   "meta": {
-    "templateCredsSetupCompleted": true
+    "templateCredsSetupCompleted": true,
+    "instanceId": "b463f123b9e8e5c0d546d2f356c901003f5a5a68e304b70b454e1ea213e6382e"
   },
-  "id": "1"
+  "nodeGroups": [],
+  "id": "b2UFQHDrbiEtt0CB",
+  "tags": []
 }
