@@ -1,4 +1,4 @@
-name: Render YouTube Kids Video
+name: Render YouTube Kids Video & Upload to Google Drive
 
 on:
   workflow_dispatch:
@@ -30,6 +30,7 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
+          pip install google-api-python-client google-auth google-auth-httplib2 google-auth-oauthlib
 
       - name: Create script file from input
         run: |
@@ -45,22 +46,18 @@ jobs:
           os.makedirs('assets/images', exist_ok=True)
           os.makedirs('assets/audio', exist_ok=True)
           
-          # Save images
           for img in data.get('sceneImages', []):
               img_data = base64.b64decode(img['imageBase64'])
               with open(f\"assets/images/scene_{img['sceneId']:03d}.png\", 'wb') as f:
                   f.write(img_data)
           
-          # Save audio
           audio_data = base64.b64decode(data['audioBase64'])
           with open('assets/audio/voiceover.wav', 'wb') as f:
               f.write(audio_data)
           
-          # Save timing
           with open('assets/timing.json', 'w') as f:
               json.dump(data.get('timing', []), f)
           
-          # Save script for renderer
           with open('assets/script.json', 'w') as f:
               json.dump(data, f)
           
@@ -71,16 +68,41 @@ jobs:
         run: |
           python3 render_video.py
 
-      - name: Upload video artifact
+      - name: Upload to Google Drive
+        env:
+          GDRIVE_SERVICE_ACCOUNT: ${{ secrets.GDRIVE_SERVICE_ACCOUNT }}
+          GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
+        run: |
+          python3 -c "
+          import os, json
+          from google.oauth2 import service_account
+          from googleapiclient.discovery import build
+          from googleapiclient.http import MediaFileUpload
+          
+          # Load service account
+          sa_info = json.loads(os.environ['GDRIVE_SERVICE_ACCOUNT'])
+          creds = service_account.Credentials.from_service_account_info(
+              sa_info, scopes=['https://www.googleapis.com/auth/drive.file']
+          )
+          service = build('drive', 'v3', credentials=creds)
+          
+          # Upload video
+          folder_id = os.environ['GDRIVE_FOLDER_ID']
+          file_metadata = {
+              'name': f\"kids_video_{os.environ.get('GITHUB_RUN_NUMBER', 'manual')}.mp4\",
+              'parents': [folder_id]
+          }
+          media = MediaFileUpload('output/video.mp4', mimetype='video/mp4', resumable=True)
+          file = service.files().create(body=file_metadata, media_body=media, fields='id,webViewLink').execute()
+          
+          print(f\"Uploaded to Google Drive!\")
+          print(f\"File ID: {file.get('id')}\")
+          print(f\"View Link: {file.get('webViewLink')}\")
+          "
+
+      - name: Upload video artifact (backup)
         uses: actions/upload-artifact@v4
         with:
           name: rendered-video
           path: output/video.mp4
-          retention-days: 1
-
-      - name: Notify n8n (optional webhook)
-        if: success()
-        run: |
-          # Could call back to n8n webhook with video URL
-          echo "Video rendered successfully"
-          ls -la output/
+          retention-days: 7
