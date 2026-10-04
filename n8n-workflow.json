@@ -20,16 +20,31 @@
     },
     {
       "parameters": {
-        "functionCode": "// Generate nursery rhyme script + scene prompts + lyrics\n// Uses Gemini API (free tier: 1500 req/day)\n\n// Robust credential extraction - handles Header Auth, OAuth2, Generic Auth\nconst cred = $credentials.geminiApi;\nconst GEMINI_API_KEY = \n  (cred?.accessToken?.replace?.('Bearer ', '') || '') ||\n  (cred?.value?.replace?.('Bearer ', '') || '') ||\n  (cred?.apiKey || '') ||\n  (cred?.api_key || '') ||\n  '';\n\nconst MODEL = 'gemini-1.5-flash';\n\nif (!GEMINI_API_KEY) {\n  throw new Error('Gemini API key not found. Credential structure: ' + JSON.stringify(Object.keys(cred || {})));\n}\n\nconst prompt = `Create a 3-minute nursery rhyme video for YouTube Kids (ages 2-5).\n\nOutput ONLY valid JSON with this exact structure:\n{\n  \"title\": \"string - catchy, kid-friendly, < 60 chars\",\n  \"description\": \"string - 2-3 sentences, includes keywords\",\n  \"tags\": [\"string\", \"...\"],\n  \"playlist\": \"string - playlist name or ID\",\n  \"scenes\": [\n    {\n      \"id\": 1,\n      \"duration\": 12,\n      \"prompt\": \"string - detailed SDXL prompt for this scene: character + setting + mood + style. Consistent character description. 2D nursery rhyme illustration style, bright colors, simple shapes.\",\n      \"lyrics\": \"string - 1-2 lines of lyrics shown on screen during this scene\",\n      \"narration\": \"string - voiceover text for this scene (spoken, not sung)\"\n    }\n    // ... 12-15 scenes total, durations sum to ~180 seconds\n  ],\n  \"backgroundMusic\": \"string - mood/tempo for CC0 music search (e.g. 'cheerful acoustic ukulele 80bpm')\"\n}\n\nRequirements:\n- Main character: A friendly animated bunny named \"Benny\" - round, soft, big ears, blue shirt, always smiling\n- Educational theme: colors, numbers, animals, or daily routines\n- Simple repetitive lyrics kids can sing along\n- Gentle, soothing tone\n- Each scene 10-15 seconds\n- Total ~180 seconds (3 minutes)\n- Scene prompts must include: \"Benny the bunny, round soft blue shirt, big ears, 2D vector illustration, nursery rhyme style, bright pastel colors, simple shapes, clean lines\"\n- Lyrics timed to match scene duration\n- Narration separate from lyrics (spoken storyteller voice)`;\n\nconst response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=***}`, {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json' },\n  body: JSON.stringify({\n    contents: [{ parts: [{ text: prompt }] }],\n    generationConfig: { temperature: 0.8, maxOutputTokens: 4096 },\n    safetySettings: [\n      { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },\n      { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },\n      { category: 'HARM_CATEGORY_SEXUAL_CONTENT', threshold: 'BLOCK_NONE' },\n      { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' }\n    ]\n  })\n});\n\nconst data = await response.json();\nlet text = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';\ntext = text.replace(/```json|```/g, '').trim();\nconst parsed = JSON.parse(text);\n\nreturn [{ json: parsed }];"
+        "model": "gemini-1.5-flash",
+        "prompt": "Create a 3-minute nursery rhyme video for YouTube Kids (ages 2-5).\n\nOutput ONLY valid JSON with this exact structure:\n{\n  \"title\": \"string - catchy, kid-friendly, < 60 chars\",\n  \"description\": \"string - 2-3 sentences, includes keywords\",\n  \"tags\": [\"string\", \"...\"],\n  \"playlist\": \"string - playlist name or ID\",\n  \"scenes\": [\n    {\n      \"id\": 1,\n      \"duration\": 12,\n      \"prompt\": \"string - detailed SDXL prompt for this scene: character + setting + mood + style. Consistent character description. 2D nursery rhyme illustration style, bright colors, simple shapes.\",\n      \"lyrics\": \"string - 1-2 lines of lyrics shown on screen during this scene\",\n      \"narration\": \"string - voiceover text for this scene (spoken, not sung)\"\n    }\n    // ... 12-15 scenes total, durations sum to ~180 seconds\n  ],\n  \"backgroundMusic\": \"string - mood/tempo for CC0 music search (e.g. 'cheerful acoustic ukulele 80bpm')\"\n}\n\nRequirements:\n- Main character: A friendly animated bunny named \"Benny\" - round, soft, big ears, blue shirt, always smiling\n- Educational theme: colors, numbers, animals, or daily routines\n- Simple repetitive lyrics kids can sing along\n- Gentle, soothing tone\n- Each scene 10-15 seconds\n- Total ~180 seconds (3 minutes)\n- Scene prompts must include: \"Benny the bunny, round soft blue shirt, big ears, 2D vector illustration, nursery rhyme style, bright pastel colors, simple shapes, clean lines\"\n- Lyrics timed to match scene duration\n- Narration separate from lyrics (spoken storyteller voice)",
+        "options": {
+          "temperature": 0.8,
+          "maxOutputTokens": 4096
+        }
       },
       "id": "generate-script",
       "name": "Generate Script (Gemini)",
-      "type": "n8n-nodes-base.function",
+      "type": "n8n-nodes-base.googleGemini",
       "typeVersion": 1,
       "position": [500, 300],
       "credentials": {
-        "geminiApi": "gemini-api"
+        "googleGeminiApi": "gemini-api"
       }
+    },
+    {
+      "parameters": {
+        "functionCode": "// Parse Gemini response and extract JSON\nconst response = $input.item.json;\nlet text = response.text || response.content || JSON.stringify(response);\ntext = text.replace(/```json|```/g, '').trim();\nconst parsed = JSON.parse(text);\n\nreturn [{ json: parsed }];"
+      },
+      "id": "parse-script",
+      "name": "Parse Script JSON",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [750, 300]
     },
     {
       "parameters": {
@@ -39,7 +54,7 @@
       "name": "Generate Scene Images (Pollinations)",
       "type": "n8n-nodes-base.function",
       "typeVersion": 1,
-      "position": [750, 300]
+      "position": [1000, 300]
     },
     {
       "parameters": {
@@ -49,7 +64,7 @@
       "name": "Generate Voiceover (Edge TTS)",
       "type": "n8n-nodes-base.function",
       "typeVersion": 1,
-      "position": [1000, 300]
+      "position": [1250, 300]
     },
     {
       "parameters": {
@@ -70,7 +85,7 @@
       "name": "Trigger GitHub Actions Render",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.1,
-      "position": [1250, 300],
+      "position": [1500, 300],
       "credentials": {
         "githubApi": "github-token"
       }
@@ -89,6 +104,17 @@
       ]
     },
     "Generate Script (Gemini)": {
+      "main": [
+        [
+          {
+            "node": "Parse Script JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Script JSON": {
       "main": [
         [
           {
